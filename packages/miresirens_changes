@@ -1,0 +1,22 @@
+[B]Mire Sirens v1.0.1[/B]
+[I]Bug Fixes - TV Lists & Trakt Calendar[/I]
+
+Fixes for the broken TV menus:
+- Trending, Trending Recent, Popular, and Popular Today TV lists were returning empty because TMDB sometimes omits the external_ids block in TV responses, which crashed every show through tvshow_meta. The TV metadata builder now tolerates missing or null external_ids.
+- The Trakt Calendar threw an unhandled error on rows where Trakt returned a null season number or partial episode data. The calendar builder now skips bad rows individually instead of crashing the whole list, and logs any problem rows for debugging.
+
+[B]Mire Sirens v1.0.0[/B]
+[I]Initial Release - Clean Fork[/I]
+
+Mire Sirens is a community-maintained continuation of the Fen Light addon family, picking up after Fen Light AM was discontinued.
+
+Changes from Fen Light AM v2.2.04:
+- Rebranded to Mire Sirens by isleysharleen
+- All shared API keys removed - users must supply their own
+- Updater repointed to https://github.com/isleysharleen/isleysharleen.github.io
+- Existing installs will be auto-detected and prompted to provide their own keys
+
+You must register your own keys before metadata, lists, or Trakt sync will work:
+- TMDb v3 API Key: https://www.themoviedb.org/settings/api
+- TMDb v4 Read Access Token: same page, copy the "API Read Access Token" (starts with "eyJ")
+- Trakt: https://trakt.tv/oauth/applications (redirect URI: urn:ietf:wg:oauth:2.0:oob)

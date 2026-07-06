@@ -1,9 +1,22 @@
-[B]Mire Sirens v1.0.1[/B]
-[I]Bug Fixes - TV Lists & Trakt Calendar[/I]
+[B]Mire Sirens v1.0.2[/B]
+[I]Trakt Watched-Sync & In-Progress Pagination Fix[/I]
 
-Fixes for the broken TV menus:
-- Trending, Trending Recent, Popular, and Popular Today TV lists were returning empty because TMDB sometimes omits the external_ids block in TV responses, which crashed every show through tvshow_meta. The TV metadata builder now tolerates missing or null external_ids.
-- The Trakt Calendar threw an unhandled error on rows where Trakt returned a null season number or partial episode data. The calendar builder now skips bad rows individually instead of crashing the whole list, and logs any problem rows for debugging.
+Fixes Trakt sync breaking due to a Trakt API change:
+- Trakt now enforces pagination on watched movies/shows AND playback progress (Continue Watching / in-progress) endpoints, silently capping results to the most recent ~100/25 items
+- Added full pagination support (get_trakt_all_pages) across all three sync calls so complete watched history and in-progress items sync correctly again
+- Updated the shows-watched query from extended=full to extended=progress to match Trakt's current API structure
+
+Fix adapted from a community patch for FLAM 2.2.04 (credit: ReaLx3m).
+
+---
+
+[B]Mire Sirens v1.0.1[/B]
+[I]TV Menu & Calendar Fix[/I]
+
+- Fixed Trending, Trending Recent, Popular, and Popular Today returning empty for TV shows — caused by TMDB returning null external_ids, which crashed metadata parsing silently for every item
+- Fixed Trakt Calendar erroring out on shows with null season/episode data; calendar building is now hardened with per-item error handling so one bad entry doesn't break the whole list
+
+---
 
 [B]Mire Sirens v1.0.0[/B]
 [I]Initial Release - Clean Fork[/I]

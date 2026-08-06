@@ -1,0 +1,128 @@
+<addons>
+<addon id="plugin.video.fenlight" name="Mire Sirens" provider-name="isleysharleen" version="1.0.32">
+    <requires>
+        <import addon="xbmc.python" version="3.0.0"/>
+        <import addon="script.module.pil" version="1.1.7"/>
+        <import addon="script.module.requests" version="2.19.1"/>
+    </requires>
+    <extension point="xbmc.python.pluginsource" library="resources/lib/fenlight.py">
+        <provides>video</provides>
+    </extension>
+    <extension point="xbmc.service" library="resources/lib/service.py"/>
+    <extension point="xbmc.python.module" library="resources/lib/"/>
+    <extension point="xbmc.addon.metadata">
+        <reuselanguageinvoker>true</reuselanguageinvoker>
+        <summary lang="en">Access your content from Easynews and Debrid Clouds.</summary>
+        <description lang="en">Mire Sirens is a community-maintained continuation of the Fen Light addon family. This add-on is intended for advanced Kodi users only. You must own the content of any media you play through this addon. This is an English language only add-on.</description>
+        <platform>all</platform>
+        <disclaimer lang="en">The author of this addon does not host any of the content which is found and has no affiliation with any of the content providers.</disclaimer>
+        <license/>
+        <assets>
+            <icon>resources/media/addon_icons/fenlight_icon_01.png</icon>
+            <fanart>resources/media/fenlight_fanart_01.jpg</fanart>
+        </assets>
+        <news>v1.0.32 - Two Collection/Watchlist fixes reported by user: (1) changes made directly on mdblist.com weren't reliably showing up in the addon even after restarting Kodi - Collection/Watchlist have carried an up-to-1-hour cache since 1.0.22, and a Kodi restart alone didn't reset that clock. The addon's background service now clears both caches once every time Kodi starts, so the next Collection/Watchlist view always does a real fetch instead of possibly serving stale data. (2) The MDBList Manager menu (right-click > MDBList Manager) always showed both "Add to Collection" and "Add to Watchlist" alongside "Remove from..." regardless of whether the item was actually already added - so adding something already on mdblist.com (or added from another device) looked like it silently did nothing. The menu now checks real current membership and only offers the action that applies.
+v1.0.31 - Fixed resume points sometimes being lost if Kodi was fully closed shortly after stopping playback - the save to MDBList was firing in a background thread with nothing waiting for it to finish, so closing Kodi could kill the network call before it completed. Also fixed Collection taking a long time to update after adding a show - adding one item used to wipe the entire cached Collection list, forcing a full re-fetch of your whole MDBList collection (tracked at the episode level for TV) the next time you opened it; now patches the single added/removed item into the cache directly instead.
+v1.0.30 - Found the likely real cause of show/season screens feeling slow specifically while actively watching something: every show and movie's watched-status lookup across the entire addon shares ONE cached blob containing your whole MDBList watch history. Marking anything watched or unwatched - including automatically, whenever an episode finishes during normal playback - deleted that entire cache, not just the one item. That meant the very next screen you opened (next season, next episode, anything) had to rebuild your ENTIRE watch history from scratch: a full, slow, page-by-page re-fetch of everything you've ever watched, before it could even render. Fixed for the common case (a single episode or movie being marked/unmarked): the cached history is now patched in place with just that one change instead of being thrown away, so the next screen reads an already-warm cache instead of triggering a full rebuild. Bulk actions (marking an entire show or season watched at once, a deliberate and infrequent action) still do a full refresh, since precisely reconstructing which episodes that affects wasn't worth the added complexity here.
+v1.0.29 - Found the real, confirmed cause of resume never working under MDBList mode: "Show Last MDBList Error" (after the 1.0.28 fix stopped a dead call from masking it) showed a genuine HTTP 405 on POST /sync/playback - that endpoint is read-only, meant only for retrieving already-saved progress, never for writing it. This means every single resume-position save has been silently failing since MDBList support was added - nothing was ever actually being saved, which is why playback always started from the beginning with no resume prompt. The real way to save progress is MDBList's scrobble system (POST /scrobble/pause), with a different payload shape than what was being sent too (an episode's season/episode need to nest inside "show", not sit as a separate top-level key). Both fixed, confirmed against a real, working reference MDBList Kodi client's documented API usage. If you still don't get a resume prompt after this, stopping partway through something and checking Show Last MDBList Error should now show whatever the actual remaining problem is, if any.
+v1.0.28 - Found and removed a broken, never-finished call that fired every time a resume/progress bookmark was saved during playback: it called MDBList with the wrong HTTP method (GET instead of whatever sync/activities actually requires), so it always failed with an HTTP 405, immediately after the real bookmark-save call. Since "Show Last MDBList Error" only remembers the single most recent failure, this guaranteed-to-fail call could silently overwrite and hide a genuine error from the actual resume-save if one occurred right before it. Removed it entirely - it was never wired into anything functional to begin with (its own code comment said so). If resume points still aren't showing up after this, "Show Last MDBList Error" should now surface the real underlying problem instead of always showing this dead-end 405.
+v1.0.26 - Likely found the actual reason nothing has stuck across app restarts (Calendar/Collection/every list staying equally slow no matter how many times Kodi was reopened): a "database maintenance" check runs on every single Kodi startup, before anything else, and checks every cache database for corruption. Until now, that check opened its own connection with zero tolerance for a database simply being busy/locked at that exact moment - ANY exception during the check (not just genuine corruption) was treated the same as real corruption, and silently deleted the affected database file with no notification at all (this always runs in silent mode). That means the metadata cache and MDBList object cache backing Calendar/Collection/every list could have been getting wiped clean on every single boot, which would fully explain why a fresh restart never actually sped anything up - the cache never survived long enough to be used a second time. Fixed: this check now uses the same lock-tolerant connection as everywhere else, and retries once after a short pause before concluding a database is genuinely corrupted rather than just momentarily busy - which is more likely than it used to be right after an unclean shutdown (like the earlier crash). If this was the real cause, the very next reload after updating to this version should be the first one to show a real difference, since it's the first time the cache actually gets a chance to survive a restart.
+v1.0.25 - Found a second, likely bigger contributor to slow list/widget loading (Calendar, Collection, My Lists, general menu navigation) on slower devices like the Nvidia Shield: every cache in this addon stored and read data using Python's repr()/eval() instead of proper serialization. eval() has to compile and execute Python source code every single time a cache entry is read - real, repeated CPU cost on every load, whether or not it's a cache hit, and worse the larger the cached data is (Calendar's full result, Collection's list, tvshow/season metadata). Switched every cache (shared cache layer, metadata cache, MDBList object cache, navigation cache, personal/My Lists cache) to json serialization instead, which is implemented in C and substantially faster to parse - existing cache entries already on disk are read once via the old method and transparently rewritten in the faster format, so no manual cache clear is needed. Also lowered the database busy_timeout introduced in 1.0.24 from 20 seconds down to 5, after a report of Kodi crashing during a very heavy reload - a shorter wait means less time spent holding memory if a write is stuck, at the cost of a slightly quicker give-up under genuine lock contention (which should now be rarer anyway given the json change reduces how long each individual cache operation takes).
+v1.0.24 - Fixed the real cause behind list/detail screens (Calendar, Collection, Watchlist, curated lists) loading very slowly on some devices, especially weaker hardware like the Nvidia Shield, with no improvement even on repeat loads. The local cache database was opened with journal_mode=OFF, which has no real mechanism for multiple concurrent worker threads (up to 15-60 at once) to write to it at the same time; under load this can throw a 'database is locked' error, and every cache write in the addon silently swallowed that failure with no retry. A chunk of freshly-fetched metadata could fail to actually save on every load, so the same shows get re-fetched from TMDB/MDBList again next time - looking exactly like the cache "isn't working," and hitting slower storage (like the Shield's) harder since a write held under lock takes longer and collides more often. Switched the database to WAL mode (built for concurrent readers/writers) with a busy_timeout, and added genuine retry-with-backoff on lock errors (same pattern as the existing TMDB/MDBList 429 retry logic) across the shared cache layer, the metadata cache (tvshow/season/curated-list data), and the MDBList object cache (Watchlist/Collection/Calendar's underlying storage). No settings changes needed - if you'd already lowered Max Threads trying to work around this, it's safe to leave as-is or put back to default.
+v1.0.23 - Fixed a NameError crash in the addon icon self-check service that masked the real underlying error (an HTTP 404 fetching the addon icon image, now also fixed on the repo side).
+v1.0.22 - Found a bigger systemic issue behind a report of fully-watched shows (confirmed correct on mdblist.com itself) still showing as in-progress here: every MDBList-backed cache in this addon (Watchlist, Collection, watched history, playback bookmarks, dropped/hidden items, My Lists, curated lists) had NO real time-based expiration at all - only ever refreshed when a change was made through this addon specifically, so anything changed on mdblist.com directly, via Plex, or from another device could sit unreflected indefinitely. Gave the underlying cache a genuine default 1-hour expiry (explicit in-addon actions like Remove from Collection still invalidate instantly as before - this is a fallback for everything else). Existing cached entries self-upgrade to the new format on first read after updating, so no manual cache clear should be needed this time. "Show Last MDBList Error" is exempted and still persists until overwritten by a new failure, so it stays useful as a log rather than expiring after an hour.
+v1.0.21 - "Show Last MDBList Error" revealed MDBList's own Cloudflare protection returning a real HTTP 429 ("Access denied") on sync/playback - same class of rate-limiting issue already fixed on the TMDB side (1.0.17), just not yet applied to MDBList's own API calls. Added the same retry-with-backoff to every MDBList API call. Also hardened the "dropped shows" (Remove from Collection's In Progress cascade) response parsing to tolerate either a flat list or a dict-wrapped shape, since that endpoint is marked BETA by MDBList and was never live-confirmed. If "Remove from Collection" still doesn't clear a show from In Progress after this, check Show Last MDBList Error again for a fresh, more specific failure.
+v1.0.20 - "Remove from Collection" (already available on every show's MDBList Manager context menu) now cascades properly: it also drops the show from In Progress (same as the existing manual "Drop" option - hides it, doesn't touch watch history) and immediately invalidates Calendar's cache so both update right away instead of the show lingering there until those caches happened to expire on their own.
+v1.0.19 - Audited every "Clear Cache" option after finding Clear Meta Cache always reported Success regardless of outcome (1.0.18) - found the identical pattern in Main Cache, Folder Scraper Cache, List Data Cache, AI Data Cache, TMDb Personal List Cache, IMDb Cache, External Scrapers Cache, and Debrid Cloud Cache: every one of these hard-coded success after issuing the delete, with no check that it actually worked. All now verify the relevant table is genuinely empty afterward before reporting success, matching the fix already applied to Clear MDBList Cache (1.0.9) and Clear Meta Cache (1.0.18). No functional/data changes - these caches were being cleared correctly when nothing went wrong, this only fixes false "Success" reports on the rare case something did go wrong.
+v1.0.18 - "Clear Meta Cache" was always reporting Success regardless of whether the delete actually worked - it swallowed any database error silently and hard-coded a success return, so the "instant success" notification was never actually verified. Now it checks the tables are genuinely empty afterward and only reports success if they are.
+v1.0.17 - Found the real, wider bug behind widespread Calendar "0 episodes" results: a full diagnostic run showed 569 of ~700 Watchlist/Collection shows getting empty season data - not a per-show problem, TMDB rate-limiting the addon's default 60-concurrent-request burst when scanning a large tracked list. Added retry-with-backoff on TMDB's 429 responses (was previously treated as a permanent failure with no retry) and capped Calendar's concurrency to 15 requests at a time. If you were previously on a version with the season-caching bug (fixed in 1.0.16), also run Clear Meta Cache once after updating to flush any bad results that got cached before that fix landed.
+v1.0.16 - Found and fixed the real Calendar bug behind MasterChef/Project Runway showing "0 episodes total": a season's episode list was cached unconditionally, including an empty result from a failed/rate-limited TMDB call, freezing it blank for up to 4 days with no way to tell a real empty season from a bad fetch (same class of bug fixed once before elsewhere in this addon). Now only real, non-empty results get cached. Also: Calendar Diagnostics now exports its full report to a text file (path shown on-screen) since copy/paste isn't available from the Kodi text viewer.
+v1.0.15 - Calendar Diagnostics now also shows the raw Watchlist/Collection ids alongside the TMDB id/status/season-count it actually resolved to, and the resolved TMDB id for every show - needed after MasterChef reported "season 16: 0 episodes total," since TMDB has multiple separate shows named "MasterChef" (US, Australia, etc.) each with their own season 16, and this will confirm whether it locked onto the wrong one.
+v1.0.14 - Added "Show Calendar Diagnostics" (Tools &gt; Database &amp; Cache Maintenance) - reports, per show in your Watchlist/Collection, exactly why it does or doesn't appear in Calendar (missing TMDB id, failed lookup, no season resolved, or episodes found but outside your Calendar day-window setting). No kodi.log needed. Built to chase a report of MasterChef/Project Runway missing from Calendar despite showing correctly in Watchlist/Collection/In Progress.
+v1.0.12 - Fixed Top 10 Box Office resolving to the wrong list: the guessed curator account/slug behind it had gone stale (renamed by its owner), so it was falling back to an unrelated, barely-maintained list with only 2 movies in it. Corrected to the current, well-populated slug. Added a "Show Curated List Diagnostics" tool (Tools &gt; Database &amp; Cache Maintenance) that found this.
+v1.0.11 - Fixed the new diagnostic screens (Last MDBList Error / Curated List Diagnostics) using a small popup that couldn't scroll or be copied; switched them to the same scrollable text viewer used for the Kodi log.
+v1.0.10 - Added "Show Curated List Diagnostics" to see exactly how Trending/Most Watched/Box Office are resolving and how many items each returns, for troubleshooting without guessing.
+v1.0.9 - Clear MDBList Cache now reports the exact number of entries it removed instead of a generic "Success," so it's actually verifiable.
+v1.0.8 - Fixed "Because You Watched" (TV) still reading from a dead local cache after the In Progress fix. Full audit turned up the same bug in 3 more places: episode/season watched checkmarks, the "Next Episodes" list, and hiding a show from In Progress - all fixed.
+v1.0.7 - Rebuilt movie/episode resume position ("Continue Watching") against MDBList's real playback-progress data; this had been silently dead since the old Trakt sync job was removed.
+v1.0.6 - Found and fixed the real cause of "In Progress" (and "Watched") TV shows being empty: the local cache these read from was only ever filled in by the old Trakt sync job, which was removed during the MDBList migration with nothing built to replace it. Rebuilt against MDBList's actual watched history.
+v1.0.5 - Calendar now pulls from your Collection as well as your Watchlist, so it works regardless of which one you actually use to track shows.
+v1.0.4 - Fixed Top 10 Box Office being capped at whatever fit on the first page (a leftover assumption from when this list was a fixed top-10 under Trakt).
+v1.0.3 - Fixed Calendar crashing on open (a missing import), fixed a caching bug that could permanently freeze a blank result for any MDBList-backed list, and bumped the version number for the first time so updates are actually visible in Kodi's addon manager.
+v1.0.2 - Fixed Trakt sync breaking due to a Trakt API pagination change: watched movies/shows history AND in-progress/Continue Watching items were being silently truncated (only the most recent ~100/25 items were coming back). Added full pagination support across all three sync calls, and updated the shows-watched query to extended=progress. (Fix based on a community patch for FLAM 2.2.04, credit ReaLx3m.)
+v1.0.1 - Fixed Trending/Popular TV menus returning empty (null external_ids from TMDB) and Trakt Calendar erroring out on null season/episode data.
+v1.0.0 - Initial release of Mire Sirens, a clean fork of Fen Light AM. Provider keys removed; users must supply their own Trakt and TMDB credentials. Updater pointed at isleysharleen GitHub.</news>
+    </extension>
+</addon>
+<addon id="skin.fentastical" version="1.0.0" name="FENtastical" provider-name="isleysharleen">
+<requires>
+<import addon="xbmc.gui" version="5.17.0"/>
+<import addon="script.fentastical.helper"/>
+</requires>
+<extension point="xbmc.gui.skin" debugging="false">
+<res width="1920" height="1440" aspect="4:3" default="false" folder="xml"/>
+<res width="1920" height="1280" aspect="3:2" default="false" folder="xml"/>
+<res width="1920" height="1200" aspect="16:10" default="false" folder="xml"/>
+<res width="2040" height="1080" aspect="17:9" default="false" folder="xml"/>
+<res width="1920" height="1080" aspect="16:9" default="true" folder="xml"/>
+<res width="2560" height="1080" aspect="21:9" default="false" folder="xml"/>
+<res width="2338" height="1080" aspect="19.5:9" default="false" folder="xml"/>
+<res width="2160" height="1080" aspect="18:9" default="false" folder="xml"/>
+</extension>
+<extension point="xbmc.addon.metadata">
+<platform>all</platform>
+<license>CC BY-SA 4.0, GNU GENERAL PUBLIC LICENSE Version 2.0</license>
+<forum/>
+<source/>
+<assets>
+<icon>resources/icon.png</icon>
+<fanart>resources/fanart.jpg</fanart>
+<screenshot>resources/images/customizable_widgets.jpg</screenshot>
+<screenshot>resources/images/infopanel.jpg</screenshot>
+<screenshot>resources/images/viewtypes1.jpg</screenshot>
+</assets>
+<summary lang="en_GB">FENtastical skin (FENtastic fork, Estuary MOD)</summary>
+<summary lang="en_NZ">FENtastical skin (FENtastic fork, Estuary MOD)</summary>
+<summary lang="en_US">FENtastical skin (FENtastic fork, Estuary MOD)</summary>
+<description lang="en_GB">FENtastical is a fork of FENtastic by Ivar Brandt, which itself is a modified version of the default Estuary skin for Kodi. It is intended for use only with FEN.[CR][CR]See [B]CHANGELOG[/B] located in Skin settings » Extra info for latest changes.</description>
+<description lang="en_NZ">FENtastical is a fork of FENtastic by Ivar Brandt, which itself is a modified version of the default Estuary skin for Kodi. It is intended for use only with FEN.[CR][CR]See [B]CHANGELOG[/B] located in Skin settings » Extra info for latest changes.</description>
+<description lang="en_US">FENtastical is a fork of FENtastic by Ivar Brandt, which itself is a modified version of the default Estuary skin for Kodi. It is intended for use only with FEN.[CR][CR]See [B]CHANGELOG[/B] located in Skin settings » Extra info for latest changes.</description>
+</extension>
+</addon>
+<addon id="script.fentastical.helper" name="FENtastical Helper" version="0.1.0" provider-name="isleysharleen (fork of script.fentastic.helper by Tikipeter, Ivar Brandt)">
+<requires>
+<import addon="xbmc.python" version="3.0.0"/>
+<import addon="script.module.requests" version="2.19.1"/>
+</requires>
+<extension point="xbmc.python.library" library="resources/lib/default.py"/>
+<extension point="xbmc.service" library="resources/lib/service.py" start="startup"/>
+<extension point="xbmc.addon.metadata">
+<news/>
+<platform>all</platform>
+<license>GPL-2.0-only</license>
+<forum/>
+<source/>
+<assets>
+<icon>resources/media/icon.png</icon>
+<fanart>resources/media/fanart.jpg</fanart>
+</assets>
+<description lang="en_GB">FENtastical Helper for the FENtastical Skin.</description>
+<description lang="en_NZ">FENtastical Helper for the FENtastical Skin.</description>
+<description lang="en_US">FENtastical Helper for the FENtastical Skin.</description>
+</extension>
+</addon>
+<addon id="repository.miresirens" name="Mire Sirens Repository" version="1.0.0" provider-name="isleysharleen">
+<extension point="xbmc.addon.repository" name="Mire Sirens Repository">
+<dir>
+<info compressed="false">https://isleysharleen.github.io/packages/addons.xml</info>
+<checksum>https://isleysharleen.github.io/packages/addons.xml.md5</checksum>
+<datadir zip="true">https://isleysharleen.github.io/packages/</datadir>
+</dir>
+</extension>
+<extension point="xbmc.addon.metadata">
+<summary lang="en">Mire Sirens Repository</summary>
+<description lang="en">Repository for Mire Sirens, a community-maintained continuation of the Fen Light addon family.</description>
+<platform>all</platform>
+</extension>
+</addon>
+</addons>
